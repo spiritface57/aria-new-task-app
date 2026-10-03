@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src", "vite.config.ts", "supabase/functions/send-notifications/notify.ts", "supabase/functions/send-notifications/notify.test.ts", "supabase/functions/reset-password/reset.ts", "supabase/functions/reset-password/reset.test.ts"]
+}

@@ -1,0 +1,10 @@
+# Cloudflare Pages headers
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  X-Frame-Options: DENY
+
+# The service worker must never be cached, or app updates get stuck.
+/sw.js
+  Cache-Control: no-cache
