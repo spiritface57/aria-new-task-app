@@ -30,6 +30,13 @@ Phones (installed web app)                 Supabase
 - Reminders are sent at most once (never spammed). Help alerts are retried
   until a parent device receives them.
 - Notes never appear in notifications.
+- Reminders ring up to 3 times (5 minutes apart) until answered, with
+  "Done ✓" and "In 10 min" buttons on Android. Tasks with a checklist or photo
+  show "Open" instead of Done.
+- Points are copied onto each result, so changing a task's points never
+  rewrites history. On "parent checks" tasks they count once a parent accepts.
+- Rewards: a request reserves the points; declining gives them back.
+- Photos are shrunk on the phone, private to the family, and deleted after 60 days.
 
 ## Launch checklist
 
@@ -39,7 +46,8 @@ on your computer. Write down the values marked ★ as you go.
 ### 1. Supabase project
 1. Create a project at supabase.com. Copy ★ Project URL and ★ anon/publishable key
    (Project Settings → API). Never use the service_role/secret key in the app.
-2. SQL Editor → paste and run `supabase/schema.sql`.
+2. SQL Editor → run `supabase/schema.sql`, then each file in
+   `supabase/migrations/` in order (each one once).
 
 ### 2. Sign-in settings (Supabase → Authentication)
 1. Sign In / Providers → **Email**: enabled, **Confirm email: OFF**
@@ -65,6 +73,7 @@ supabase secrets set VAPID_PUBLIC_KEY=<★> VAPID_PRIVATE_KEY=<★> \
 supabase secrets set APP_ORIGIN=https://<your-app>.pages.dev   # after step 7; optional but recommended
 supabase functions deploy send-notifications --no-verify-jwt
 supabase functions deploy reset-password --no-verify-jwt
+supabase functions deploy notification-action --no-verify-jwt
 ```
 If the function logs say `Missing secret SUPABASE_SERVICE_ROLE_KEY`, also run
 `supabase secrets set SERVICE_ROLE_KEY=<your service_role or secret key>`.
@@ -80,16 +89,23 @@ Copy ★ site key and ★ secret key. Supabase → Authentication → Attack Pro
 enable CAPTCHA, provider Turnstile, paste the **secret** key. This protects
 parent sign-up, sign-in and children's anonymous sign-in from bots.
 
-### 7. Hosting (Cloudflare Pages)
-1. Push this folder to a GitHub repository.
-2. Cloudflare → Workers & Pages → Create → Pages → connect the repo.
-   Build command `npm run build`, output directory `dist`.
-3. Environment variables (Production):
-   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_VAPID_PUBLIC_KEY`,
-   `VITE_TURNSTILE_SITE_KEY` (the **site** key).
-4. Deploy. Your app is at ★ `https://<your-app>.pages.dev`.
-5. Supabase → Authentication → URL Configuration: Site URL = that address;
-   add it to Redirect URLs too (plus `http://localhost:5173` for development).
+### 7. Hosting (Cloudflare Workers, static assets)
+`wrangler.jsonc` serves `dist/` as a single-page app. No server code.
+
+**Connected to a Git repository** (Workers & Pages → your project → Settings → Build):
+- Build command: `npm run build` (never `npm run dev`; that starts a dev server
+  that never finishes, and the build hangs)
+- Deploy command: `npx wrangler deploy`
+- Build variables (Settings → Build → Variables and secrets, **not** runtime
+  variables; Vite reads them while building): `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_ANON_KEY`, `VITE_VAPID_PUBLIC_KEY`, `VITE_TURNSTILE_SITE_KEY`.
+  Change any of them → redeploy.
+
+**From your computer instead:** fill in `.env`, then `npm install && npm run deploy`.
+
+Your app is at ★ `https://aria-new-task-app.<your-subdomain>.workers.dev`.
+Use that exact address for the Turnstile hostname, `APP_ORIGIN`, and
+Supabase → Authentication → URL Configuration → Site URL.
 
 ### 8. Test on real phones before inviting anyone
 - Android (Chrome): open the site → install → create a parent account → save the
@@ -125,7 +141,9 @@ supabase/
   cron.sql    pg_cron, Vault secrets, Realtime publication
   functions/send-notifications/  reminders and help alerts (Deno) + testable core
   functions/reset-password/      recovery-code password reset (Deno) + testable core
-  tests/      79 database tests
+  functions/notification-action/ Done / Snooze buttons on reminders
+  migrations/ schema changes after schema.sql, run in order
+  tests/      122 database tests
 ```
 
 ## Known limits
@@ -142,4 +160,3 @@ supabase/
 - Supabase Free pauses a project after 7 days without use. Move to Pro before
   families depend on it.
 - Families: up to 4 parents, 10 children, 200 tasks (see `private.limit_of`).
-# aria-new-task-app

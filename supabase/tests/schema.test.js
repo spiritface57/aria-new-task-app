@@ -14,6 +14,9 @@ const ok = (name, cond) => { cond ? pass++ : failures.push(name); };
   await db.connect();
   await db.query(fs.readFileSync(dir + 'tests/supabase-stub.sql', 'utf8'));
   await db.query(fs.readFileSync(dir + 'schema.sql', 'utf8'));
+  for (const m of fs.readdirSync(dir + 'migrations').sort()) {
+    await db.query(fs.readFileSync(dir + 'migrations/' + m, 'utf8'));
+  }
 
   const users = {};
   const mkUser = async (name, anon = false) => {
@@ -161,6 +164,104 @@ const ok = (name, cond) => { cond ? pass++ : failures.push(name); };
   const rc2 = (await as(null, `select replace_recovery_code($1) c`, [users.dad.id], 'service_role')).rows[0].c;
   ok('old code stops working after reset', await find('dad@example.com', rc) === null && await find('dad@example.com', rc2) === users.dad.id);
 
+  // ── Features: one-time tasks, points, review, rewards, photos, streaks, buttons ──
+  const plus = (n) => (n >= 0 ? `+ ${n}` : `- ${-n}`);
+  const famDay = (n) => db.query(`select ((now() at time zone 'America/Toronto')::date ${plus(n)})::text d`).then(r => r.rows[0].d);
+  const save = (who, title, extra = {}, kids = [aria]) => as(who,
+    `select save_task(null,$1,'16:00',$2,true,$3::uuid[],$4,$5::date,$6,$7,$8,$9::text[]) t`,
+    [title, extra.kind === 'once' ? 0 : 127, kids, extra.kind ?? 'repeat', extra.due ?? null,
+     extra.points ?? 0, extra.check ?? false, extra.photo ?? false, extra.list ?? []]);
+  const submit = (who, task, date, state = 'done', photo = null) =>
+    as(who, `select submit_result($1,$2,$3::date,$4,'',$5)`, [task, aria, date, state, photo]);
+  const stats = async (who) => (await as(who, `select * from child_stats()`)).rows;
+
+  ok('once task needs a date', err(await save('dad', 'X', { kind: 'once' })).includes('due_date_required'));
+  const dentist = (await save('dad', 'Dentist', { kind: 'once', due: await famDay(2), points: 5 })).rows[0].t;
+  ok('once task not due on other days', err(await submit('ariaPhone2', dentist, await famDay(0))).includes('not_scheduled'));
+  ok('once task can be done early', !(await submit('ariaPhone2', dentist, await famDay(2))).error);
+  const book = (await save('dad', 'Return library book', { kind: 'once', due: await famDay(-20) })).rows[0].t;
+  ok('late once task can still be done (no 14-day limit)', !(await submit('ariaPhone2', book, await famDay(-20))).error);
+
+  const earned = async () => (await stats('dad')).find(r => r.child_id === aria).earned;
+  const e0 = await earned();
+  ok('points count immediately when no check is needed', e0 >= 5);
+  const chores = (await save('dad', 'Chores', { points: 10, check: true })).rows[0].t;
+  await submit('ariaPhone2', chores, today);
+  ok('checked task: no points before parent accepts', await earned() === e0);
+  ok('child cannot accept own task', err(await as('ariaPhone2', `select review_result($1,$2,$3::date,true)`, [chores, aria, today])).includes('parents_only'));
+  await as('dad', `select review_result($1,$2,$3::date,true)`, [chores, aria, today]);
+  ok('points count after parent accepts', await earned() === e0 + 10);
+  await as('dad', `select save_task($1,'Chores','16:00',127,true,array[$2]::uuid[],'repeat',null,50,true,false,'{}')`, [chores, aria]);
+  ok('changing task points later keeps history', await earned() === e0 + 10);
+  const dishes = (await save('dad', 'Dishes', { points: 7, check: true })).rows[0].t;
+  await submit('ariaPhone2', dishes, today);
+  await as('dad', `select review_result($1,$2,$3::date,false)`, [dishes, aria, today]);
+  const rej = (await db.query(`select state, points from task_results where task_id=$1`, [dishes])).rows[0];
+  ok('rejected done becomes not done with no points', rej.state === 'not_done' && rej.points === 0);
+  const pianoDone = (await db.query(`select approved_at from task_results where task_id=$1 and local_date=$2`, [piano, today])).rows[0];
+  ok('parent-recorded and old results are approved', pianoDone === undefined || pianoDone.approved_at !== undefined);
+
+  // Rewards
+  ok('child cannot create rewards', err(await as('ariaPhone2', `select save_reward(null,'X',1,true)`)).includes('parents_only'));
+  const tablet = (await as('dad', `select save_reward(null,'Tablet time',$1,true) r`, [e0 + 10])).rows[0].r;
+  const balance = async () => (await stats('ariaPhone2'))[0].balance;
+  const before = await balance();
+  const req = (await as('ariaPhone2', `select request_reward($1,$2) r`, [tablet, aria])).rows[0].r;
+  ok('request reserves points', await balance() === before - (e0 + 10));
+  ok('cannot overspend', err(await as('ariaPhone2', `select request_reward($1,$2)`, [tablet, aria])).includes('not_enough_points'));
+  ok('sibling cannot request for aria', err(await as('samPhone', `select request_reward($1,$2)`, [tablet, aria])).includes('not_allowed'));
+  ok('sibling cannot see aria requests', (await as('samPhone', `select count(*)::int n from reward_requests`)).rows[0].n === 0);
+  await as('dad', `select decide_reward_request($1,false)`, [req]);
+  ok('declined request returns points', await balance() === before);
+  ok('decided request cannot be decided again', err(await as('dad', `select decide_reward_request($1,true)`, [req])).includes('request_not_found'));
+  ok('child sees only own stats', (await stats('ariaPhone2')).length === 1);
+
+  // Photo proof
+  const room = (await save('dad', 'Clean room', { photo: true })).rows[0].t;
+  ok('photo required for photo task', err(await submit('ariaPhone2', room, today)).includes('photo_required'));
+  const myPath = `${fam}/${aria}/${room}/${today}-a.jpg`;
+  ok('child uploads into own folder', !(await as('ariaPhone2', `insert into storage.objects(bucket_id,name) values ('proofs',$1)`, [myPath])).error);
+  ok('child cannot upload into sibling folder', !!(await as('ariaPhone2', `insert into storage.objects(bucket_id,name) values ('proofs',$1)`, [`${fam}/${sam}/x/y.jpg`])).error);
+  ok('parent cannot upload', !!(await as('dad', `insert into storage.objects(bucket_id,name) values ('proofs',$1)`, [`${fam}/${aria}/x/z.jpg`])).error);
+  ok('fake photo path rejected', err(await submit('ariaPhone2', room, today, 'done', `${fam}/${aria}/${room}/nope.jpg`)).includes('photo_invalid'));
+  ok('done with photo accepted', !(await submit('ariaPhone2', room, today, 'done', myPath)).error);
+  ok('answering again keeps the earlier photo', !(await submit('ariaPhone2', room, today, 'done')).error
+    && (await db.query(`select photo_path from task_results where task_id=$1`, [room])).rows[0].photo_path === myPath);
+  ok('parent can see the photo', (await as('dad', `select count(*)::int n from storage.objects`)).rows[0].n === 1);
+  ok('sibling cannot see the photo', (await as('samPhone', `select count(*)::int n from storage.objects`)).rows[0].n === 0);
+  ok('other family cannot see the photo', (await as('other', `select count(*)::int n from storage.objects`)).rows[0].n === 0);
+  await db.query(`update storage.objects set created_at = now() - interval '61 days'`);
+  const old = (await as(null, `select * from expired_photos()`, [], 'service_role')).rows;
+  ok('expired photos listed for cleanup', old.length === 1 && old[0].name === myPath);
+  await as(null, `select forget_photos($1::text[])`, [[myPath]], 'service_role');
+  ok('results forget removed photos', (await db.query(`select photo_path from task_results where task_id=$1`, [room])).rows[0].photo_path === null);
+
+  // Streak
+  const zoe = (await as('dad', `select add_child('Zoe') c`)).rows[0].c;
+  const walk = (await as('dad', `select save_task(null,'Walk dog','09:00',127,true,array[$1]::uuid[]) t`, [zoe])).rows[0].t;
+  await db.query(`update tasks set starts_on = $2::date - 5 where id = $1`, [walk, today]);
+  for (const n of [0, -1, -2, -4]) {
+    await db.query(`insert into task_results(task_id,child_id,family_id,local_date,state,approved_at) values ($1,$2,$3,$4::date,'done',now())`, [walk, zoe, fam, await famDay(n)]);
+  }
+  const zoeStreak = async () => (await stats('dad')).find(r => r.child_id === zoe).streak;
+  ok('streak counts consecutive complete days', await zoeStreak() === 3);
+  await db.query(`delete from task_results where task_id=$1 and local_date=$2::date`, [walk, today]);
+  ok('unfinished today does not break the streak', await zoeStreak() === 2);
+
+  // Notification buttons (real clock)
+  const nowLocal = (await db.query(`select to_char((now() at time zone 'America/Toronto') - interval '2 minutes','HH24:MI') t`)).rows[0].t;
+  const fish = (await as('dad', `select save_task(null,'Feed fish',$1::time,127,true,array[$2]::uuid[]) t`, [nowLocal, aria])).rows[0].t;
+  const pack = (await save('dad', 'Pack bag', { list: ['books', ' ', 'lunch'] })).rows[0].t;
+  ok('blank checklist items dropped', (await db.query(`select checklist from tasks where id=$1`, [pack])).rows[0].checklist.length === 2);
+  const live = (await as(null, `select * from claim_due_reminders()`, [], 'service_role')).rows.find(r => r.title === 'Feed fish');
+  ok('live reminder claimed with token', !!live?.token && live.quick_done === true);
+  ok('users cannot use tokens directly', err(await as('ariaPhone2', `select use_reminder_token('x','done')`)).includes('permission denied'));
+  const useTok = async (t, a) => (await as(null, `select use_reminder_token($1,$2) r`, [t, a], 'service_role')).rows[0].r;
+  ok('wrong token is invalid', await useTok('NOPE', 'done') === 'invalid');
+  ok('Done button records the result', await useTok(live.token, 'done') === 'done'
+    && (await db.query(`select state from task_results where task_id=$1`, [fish])).rows[0]?.state === 'done');
+  ok('token works only once', await useTok(live.token, 'done') === 'invalid');
+
   // Reminders: freeze a task at a known date and simulate the clock
   await db.query(`update tasks set starts_on = '2027-01-01'`);
   await db.query(`delete from task_results`);
@@ -170,6 +271,11 @@ const ok = (name, cond) => { cond ? pass++ : failures.push(name); };
   const r1 = await claim('2027-01-05T22:00:30Z');
   ok('due reminder claimed with endpoint', r1.length === 1 && r1[0].title === 'Piano' && r1[0].endpoint === 'https://push.example/abc');
   ok('second run does not resend', (await claim('2027-01-05T22:01:30Z')).length === 0);
+  const r2 = await claim('2027-01-05T22:05:30Z');
+  ok('rings again after 5 minutes', r2.length === 1 && r2[0].attempt === 2);
+  ok('third ring after 10 minutes', (await claim('2027-01-05T22:10:30Z'))[0]?.attempt === 3);
+  ok('stops after 3 rings', (await claim('2027-01-05T22:15:30Z')).length === 0);
+  ok('each ring has a fresh token', r1[0].token && r2[0].token && r1[0].token !== r2[0].token);
   ok('outage beyond lookback is skipped', (await claim('2027-01-06T22:30:00Z')).length === 0);
   // Already answered -> no reminder (Wed 2027-01-06 17:00 local)
   await db.query(`insert into task_results values ($1,$2,$3,'2027-01-07','done','',null,now())`, [piano, aria, fam]);
@@ -182,7 +288,7 @@ const ok = (name, cond) => { cond ? pass++ : failures.push(name); };
   await db.query(`update tasks set time_local='01:30' where id=$1`, [piano]);
   let fb = 0;
   for (let m = 0; m <= 180; m++) fb += (await claim(new Date(Date.parse('2027-11-07T05:00:00Z') + m * 60000).toISOString())).length;
-  ok('repeated local time fires once', fb === 1);
+  ok('repeated local time rings one series of 3', fb === 3);
   // Archived child gets no reminders
   await db.query(`update tasks set time_local='17:00' where id=$1`, [piano]);
   await as('dad', `select update_child($1,'Aria',true)`, [aria]);

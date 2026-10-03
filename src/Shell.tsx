@@ -8,12 +8,13 @@ import { Week } from './screens/Week';
 import { Tasks } from './screens/Tasks';
 import { FamilyScreen } from './screens/Family';
 import { Me } from './screens/Me';
+import { Rewards } from './screens/Rewards';
 import { RespondSheet, type RespondTarget } from './screens/RespondSheet';
 import type { Membership } from './lib/types';
 
-type Tab = 'today' | 'week' | 'tasks' | 'family' | 'me';
-const PARENT_TABS: [Tab, string][] = [['today', 'Today'], ['week', 'Week'], ['tasks', 'Tasks'], ['family', 'Family']];
-const CHILD_TABS: [Tab, string][] = [['today', 'Today'], ['week', 'Week'], ['me', 'Me']];
+type Tab = 'today' | 'week' | 'tasks' | 'rewards' | 'family' | 'me';
+const PARENT_TABS: [Tab, string][] = [['today', 'Today'], ['week', 'Week'], ['tasks', 'Tasks'], ['rewards', 'Rewards'], ['family', 'Family']];
+const CHILD_TABS: [Tab, string][] = [['today', 'Today'], ['week', 'Week'], ['rewards', 'Rewards'], ['me', 'Me']];
 
 /** Notification taps open /?respond=…&child=…&date=… or /?tab=… */
 function parseLink(search: string): { tab?: Tab; respond?: RespondTarget } {
@@ -81,6 +82,7 @@ export function Shell({ membership }: { membership: Exclude<Membership, { role: 
         {tab === 'today' && <Today onRespond={setRespond} />}
         {tab === 'week' && <Week />}
         {tab === 'tasks' && isParent && <Tasks />}
+        {tab === 'rewards' && <Rewards />}
         {tab === 'family' && isParent && <FamilyScreen />}
         {tab === 'me' && !isParent && <Me />}
         <nav className="tabbar" aria-label="Main">

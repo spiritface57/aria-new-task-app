@@ -49,6 +49,15 @@ Deno.serve(async (req) => {
         check(await db.from('push_subscriptions').delete().in('endpoint', endpoints));
       },
       send,
+      cleanupPhotos: async () => {
+        const rows = check<{ name: string }[]>(await db.rpc('expired_photos', { p_limit: 100 })) ?? [];
+        if (!rows.length) return 0;
+        const names = rows.map((r) => r.name);
+        const { error } = await db.storage.from('proofs').remove(names);
+        if (error) throw new Error(error.message);
+        check(await db.rpc('forget_photos', { p_names: names }));
+        return names.length;
+      },
     });
     return Response.json(summary);
   } catch (e) {

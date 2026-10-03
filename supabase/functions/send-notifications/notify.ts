@@ -1,7 +1,12 @@
 // Runtime-agnostic core, so it can be unit-tested outside Deno.
 
 export interface Target { endpoint: string; p256dh: string; auth: string }
-export interface Reminder extends Target { task_id: string; child_id: string; local_date: string; title: string }
+export interface Reminder extends Target {
+  task_id: string; child_id: string; local_date: string; title: string;
+  attempt: number;        // 1, 2 or 3: rings again until answered
+  token: string;          // authorises the Done / Snooze buttons
+  quick_done: boolean;    // false when the task needs a checklist or photo
+}
 export interface HelpAlert extends Target { alert_id: number; child_name: string; title: string }
 
 export interface Message {
@@ -9,6 +14,9 @@ export interface Message {
   body: string;
   url: string;   // opened when the notification is tapped
   tag: string;   // same tag replaces an older notification instead of stacking
+  kind: 'reminder' | 'help';
+  token?: string;
+  actions?: { action: 'done' | 'snooze' | 'open'; title: string }[];
 }
 
 export type SendResult = 'ok' | 'gone' | 'failed';
@@ -19,17 +27,29 @@ export interface Deps {
   completeHelpAlerts(ids: number[]): Promise<void>;
   removeEndpoints(endpoints: string[]): Promise<void>;
   send(target: Target, message: Message): Promise<SendResult>;
+  /** Removes photos older than 60 days; returns how many. */
+  cleanupPhotos(): Promise<number>;
 }
 
 // Notes are never put in a notification: lock screens are not private.
 export function reminderMessage(r: Reminder): Message {
   const q = new URLSearchParams({ respond: r.task_id, child: r.child_id, date: r.local_date });
-  return { title: r.title, body: 'Time for this task. Tap to tell your family how it went.',
-           url: `/?${q}`, tag: `reminder:${r.task_id}:${r.child_id}:${r.local_date}` };
+  return {
+    kind: 'reminder',
+    title: r.attempt > 1 ? `⏰ ${r.title} (reminder ${r.attempt} of 3)` : `⏰ ${r.title}`,
+    body: r.quick_done ? 'Time for this task!' : 'Time for this task! Open the app to finish it.',
+    url: `/?${q}`,
+    // Same tag on every ring: the new ring replaces the old one and alerts again.
+    tag: `reminder:${r.task_id}:${r.child_id}:${r.local_date}`,
+    token: r.token,
+    actions: r.quick_done
+      ? [{ action: 'done', title: 'Done ✓' }, { action: 'snooze', title: 'In 10 min' }]
+      : [{ action: 'open', title: 'Open' }, { action: 'snooze', title: 'In 10 min' }],
+  };
 }
 
 export function helpMessage(a: HelpAlert): Message {
-  return { title: `${a.child_name} needs help`, body: a.title,
+  return { kind: 'help', title: `${a.child_name} needs help`, body: a.title,
            url: '/?tab=today', tag: `help:${a.alert_id}` };
 }
 
@@ -61,6 +81,9 @@ export async function run(deps: Deps) {
   if (delivered.size) await deps.completeHelpAlerts([...delivered]);
   if (gone.size) await deps.removeEndpoints([...gone]);
 
+  // Housekeeping must never block notifications.
+  const photosRemoved = await deps.cleanupPhotos().catch(() => 0);
+
   return { reminders: reminders.length, alerts: alerts.length, sent: results.filter((r) => r === 'ok').length,
-           failed: results.filter((r) => r === 'failed').length, removed: gone.size };
+           failed: results.filter((r) => r === 'failed').length, removed: gone.size, photosRemoved };
 }

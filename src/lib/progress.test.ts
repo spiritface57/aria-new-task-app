@@ -3,9 +3,10 @@ import { indexResults, weekCounts } from './progress';
 import type { Task, TaskResult } from './types';
 
 const task = (id: string, assignees: string[], days_mask = 127): Task =>
-  ({ id, title: id, days_mask, time_local: '17:00:00', active: true, starts_on: '2026-09-01', assignees });
+  ({ id, title: id, kind: 'repeat', due_on: null, days_mask, time_local: '17:00:00', active: true, starts_on: '2026-09-01',
+     points: 0, needs_check: false, needs_photo: false, checklist: [], assignees });
 const result = (task_id: string, child_id: string, local_date: string, state: TaskResult['state']): TaskResult =>
-  ({ task_id, child_id, local_date, state, note: '', updated_at: '' });
+  ({ task_id, child_id, local_date, state, note: '', updated_at: '', points: 0, needs_check: false, approved_at: null, photo_path: null });
 
 describe('weekCounts', () => {
   const tasks = [task('piano', ['aria']), task('reading', ['aria', 'sam'])];

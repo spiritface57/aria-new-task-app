@@ -8,7 +8,7 @@ const TEXT: Record<PushState, string> = {
   unsupported: 'This browser can’t show notifications. Use Chrome on Android or the installed app on iPhone.',
   denied: 'Notifications are blocked. Allow them for this app in your phone’s settings, then come back.',
   off: '',
-  on: 'On for this phone.',
+  on: 'On for this phone. Tip for Android: in the phone’s Settings → Apps → Family Tasks → Notifications, pick a loud ringtone as the sound.',
 };
 
 export function NotificationsCard({ purpose }: { purpose: 'reminders' | 'help alerts' }) {

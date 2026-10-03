@@ -27,6 +27,17 @@ const MESSAGES: Record<string, string> = {
   not_scheduled: 'This task isn’t scheduled on that day.',
   too_old: 'That day is too long ago to change.',
   invalid_state: 'Choose Done, Need help or Not done.',
+  photo_required: 'Take a photo first, then tap Done.',
+  photo_invalid: 'The photo didn’t upload properly. Take it again.',
+  due_date_required: 'Choose a date for this one-time task.',
+  checklist_too_long: 'A checklist can have up to 20 items.',
+  invalid_task_kind: 'Choose Repeats or One time.',
+  result_not_found: 'This answer changed meanwhile. Pull down to refresh.',
+  limit_rewards: 'A family can have up to 50 rewards.',
+  limit_pending_rewards: 'You already have 10 requests waiting. Wait for a parent to answer them.',
+  not_enough_points: 'Not enough points yet. Keep going!',
+  reward_not_found: 'That reward is no longer available.',
+  request_not_found: 'That request was already answered.',
 };
 
 export function errorMessage(error: unknown): string {

@@ -39,8 +39,23 @@ export function maskToDays(mask: number): number[] {
   return [1, 2, 3, 4, 5, 6, 7].filter((day) => (mask & (1 << (day - 1))) !== 0);
 }
 
-export function isScheduled(task: Pick<Task, 'days_mask' | 'starts_on' | 'active'>, d: ISODate): boolean {
-  return task.active && d >= task.starts_on && (task.days_mask & (1 << (isoWeekday(d) - 1))) !== 0;
+type Schedule = Pick<Task, 'kind' | 'days_mask' | 'due_on' | 'starts_on' | 'active'>;
+
+/** Mirrors private.is_due_on in the database. */
+export function isScheduled(task: Schedule, d: ISODate): boolean {
+  if (!task.active) return false;
+  if (task.kind === 'once') return task.due_on === d;
+  return d >= task.starts_on && (task.days_mask & (1 << (isoWeekday(d) - 1))) !== 0;
+}
+
+/** Next date on or after `from` when a repeating task is due. */
+export function nextOccurrence(task: Schedule, from: ISODate): ISODate | null {
+  if (task.kind === 'once') return task.due_on;
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(from, i);
+    if (isScheduled({ ...task, active: true }, d)) return d;
+  }
+  return null;
 }
 
 export const WEEKDAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

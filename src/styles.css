@@ -13,7 +13,36 @@
   --radius-lg: 22px;
   --radius-sm: 10px;
   --tabbar: 64px;
+  --nav: #1D2B53;        /* tab bar */
+  --notice: #FFF6DB;
+  --notice-danger: #FCE8EF;
+  --help-text: #8A6000;
+  --on-action: #FFFFFF;
   color-scheme: light;
+}
+
+/* Dark mode follows the phone's setting. Same roles, re-tuned for contrast. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #E6EAF5;
+    --paper: #0F1526;
+    --card: #1A2238;
+    --line: #2C3654;
+    --muted: #9AA6C4;
+    --action: #6F95F2;
+    --leaf: #3DBA83;
+    --sun: #F3BE45;
+    --berry: #E46A90;
+    --nav: #0A0F1D;
+    --notice: #3A3013;
+    --notice-danger: #3D1A27;
+    --help-text: #F3BE45;
+    --on-action: #0F1526;
+    color-scheme: dark;
+  }
+  .btn-primary, .btn-danger:not(.btn-quiet) { color: var(--on-action); }
+  .chip[aria-pressed="true"] { background: var(--action); border-color: var(--action); color: var(--on-action); }
+  .stamp-help { color: #1D2B53; }
 }
 
 * { box-sizing: border-box; }
@@ -52,7 +81,9 @@ code { font-size: 0.9em; }
   cursor: pointer; text-align: center;
 }
 .btn:disabled { opacity: 0.55; cursor: default; }
-.btn-primary { background: var(--action); border-color: var(--action); color: #fff; }
+.btn-primary { background: var(--action); border-color: var(--action); color: var(--on-action); }
+a.btn { display: inline-grid; place-items: center; text-decoration: none; color: inherit; }
+a.btn-primary { color: var(--on-action); }
 .btn-small { min-height: 38px; padding: 0 14px; font-size: 0.92rem; }
 .btn-quiet { background: transparent; border-color: transparent; color: var(--action); }
 .btn-danger { color: var(--berry); }
@@ -103,7 +134,7 @@ code { font-size: 0.9em; }
 .slot-title { font-weight: 700; font-size: 1.05rem; overflow-wrap: anywhere; }
 .slot-state { font-size: 0.85rem; font-weight: 700; color: var(--muted); }
 .state-done { color: var(--leaf); }
-.state-help { color: #8A6000; }
+.state-help { color: var(--help-text); }
 .state-not_done { color: var(--berry); }
 .slot-note { font-size: 0.9rem; color: var(--muted); font-style: italic; overflow-wrap: anywhere; }
 .empty { color: var(--muted); padding: 18px; border: 1.5px dashed var(--line); border-radius: var(--radius-lg); }
@@ -164,8 +195,8 @@ textarea { resize: vertical; }
 .check input { width: 22px; height: 22px; }
 .captcha { min-height: 65px; }
 .error { color: var(--berry); font-weight: 700; }
-.notice { background: #FFF6DB; border-radius: var(--radius-sm); padding: 14px 16px; display: grid; gap: 8px; }
-.notice-danger { background: #FCE8EF; }
+.notice { background: var(--notice); border-radius: var(--radius-sm); padding: 14px 16px; display: grid; gap: 8px; }
+.notice-danger { background: var(--notice-danger); }
 .code {
   font: 800 1.35rem/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   letter-spacing: 0.04em; text-align: center; padding: 16px; border-radius: var(--radius-sm);
@@ -179,13 +210,14 @@ textarea { resize: vertical; }
   border: 2px solid var(--line); background: var(--card); font-weight: 800; cursor: pointer;
 }
 .choice[aria-checked="true"] { border-color: var(--ink); }
+.choice:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Bottom sheet (native <dialog>) */
 .sheet {
   width: 100%; max-width: 560px; max-height: 92dvh; margin: auto auto 0; padding: 0;
   border: 0; border-radius: 26px 26px 0 0; background: var(--card); color: var(--ink);
 }
-.sheet::backdrop { background: rgb(29 43 83 / 0.45); }
+.sheet::backdrop { background: rgb(10 15 29 / 0.55); }
 .sheet-body { padding: 8px 20px calc(24px + env(safe-area-inset-bottom)); display: grid; gap: 14px; }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; position: sticky; top: 0; background: var(--card); padding-top: 12px; }
 @media (min-width: 700px) { .sheet { margin: auto; border-radius: 26px; } }
@@ -199,7 +231,38 @@ textarea { resize: vertical; }
   position: fixed; inset: auto 0 0 0; z-index: 5;
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   height: calc(var(--tabbar) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
-  background: var(--ink);
+  background: var(--nav);
 }
 .tab { border: 0; background: transparent; color: #AEB8D6; font-weight: 800; font-size: 0.95rem; cursor: pointer; }
 .tab[aria-current="page"] { color: #fff; box-shadow: inset 0 3px 0 var(--sun); }
+
+/* Points, streaks and badges */
+.badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge { padding: 6px 12px; border-radius: 999px; font-weight: 800; font-size: 0.95rem; background: var(--card); }
+.badge-streak { box-shadow: inset 0 0 0 2px var(--berry); }
+.badge-points { box-shadow: inset 0 0 0 2px var(--sun); }
+.pts { margin-left: 8px; font-size: 0.8rem; font-weight: 800; color: var(--leaf); white-space: nowrap; }
+.late-head { color: var(--berry); }
+.tag-approved { background: var(--leaf); color: #fff; }
+.tag-declined { background: var(--line); }
+.tag-pending { background: var(--sun); color: #1D2B53; }
+
+/* Layout helpers */
+.button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.button-col { display: grid; gap: 6px; flex: none; }
+.check-row { align-items: flex-start; }
+.segmented { display: grid; grid-template-columns: 1fr 1fr; background: var(--paper); border-radius: 14px; padding: 4px; gap: 4px; }
+.segmented button { min-height: 42px; border: 0; border-radius: 10px; background: transparent; font-weight: 800; cursor: pointer; }
+.segmented button[aria-checked="true"] { background: var(--card); box-shadow: 0 0 0 1.5px var(--line); }
+
+/* Checklist and photos */
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.checklist .check { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--paper); }
+.checklist .check:has(input:checked) { text-decoration: line-through; color: var(--muted); }
+.photo-btn { display: grid; place-items: center; }
+.photo-preview { width: 100%; max-height: 320px; object-fit: contain; border-radius: var(--radius-sm); background: var(--paper); }
+.photo-view {
+  position: fixed; inset: 0; z-index: 20; border: 0; padding: 16px; cursor: zoom-out;
+  background: rgb(10 15 29 / 0.9); display: grid; place-items: center;
+}
+.photo-view img { max-width: 100%; max-height: 100%; border-radius: var(--radius-sm); }

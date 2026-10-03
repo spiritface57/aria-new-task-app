@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, daysToMask, describeDays, isScheduled, isoWeekday, maskToDays, todayIn, weekStart } from './dates';
+import { addDays, daysToMask, describeDays, isScheduled, isoWeekday, maskToDays, nextOccurrence, todayIn, weekStart } from './dates';
 
 describe('todayIn', () => {
   it('uses the family time zone, not the device', () => {
@@ -30,11 +30,24 @@ describe('calendar maths', () => {
 });
 
 describe('isScheduled', () => {
-  const task = { days_mask: daysToMask([6]), starts_on: '2026-10-01', active: true };
+  const task = { kind: 'repeat' as const, due_on: null, days_mask: daysToMask([6]), starts_on: '2026-10-01', active: true };
   it('matches weekday, start date and active flag', () => {
     expect(isScheduled(task, '2026-10-03')).toBe(true);
     expect(isScheduled(task, '2026-10-04')).toBe(false);          // Sunday
     expect(isScheduled({ ...task, starts_on: '2026-10-10' }, '2026-10-03')).toBe(false);
     expect(isScheduled({ ...task, active: false }, '2026-10-03')).toBe(false);
+  });
+});
+
+describe('one-time tasks', () => {
+  const once = { kind: 'once' as const, due_on: '2026-10-09', days_mask: 0, starts_on: '2026-10-01', active: true };
+  it('are scheduled only on their due date', () => {
+    expect(isScheduled(once, '2026-10-09')).toBe(true);
+    expect(isScheduled(once, '2026-10-10')).toBe(false);
+  });
+  it('next occurrence of a repeating task skips unscheduled days', () => {
+    const sat = { kind: 'repeat' as const, due_on: null, days_mask: daysToMask([6]), starts_on: '2026-09-01', active: true };
+    expect(nextOccurrence(sat, '2026-10-05')).toBe('2026-10-10');
+    expect(nextOccurrence(once, '2026-10-01')).toBe('2026-10-09');
   });
 });

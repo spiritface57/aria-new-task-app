@@ -44,14 +44,40 @@ export function useResults(familyId: string, from: ISODate, to: ISODate) {
   });
 }
 
+export function useOnceResults(familyId: string, taskIds: string[]) {
+  return useQuery({
+    queryKey: ['results', familyId, 'once', taskIds.join()],
+    queryFn: () => load.resultsForTasks(familyId, taskIds),
+  });
+}
+
+export function usePendingChecks(familyId: string, enabled: boolean) {
+  return useQuery({ queryKey: ['results', familyId, 'pending'], queryFn: () => load.pendingChecks(familyId), enabled });
+}
+
+export function useStats(familyId: string) {
+  return useQuery({ queryKey: ['stats', familyId], queryFn: load.stats });
+}
+
+export function useRewards(familyId: string) {
+  return {
+    rewards: useQuery({ queryKey: ['rewards', familyId], queryFn: () => load.rewards(familyId) }),
+    requests: useQuery({ queryKey: ['rewardRequests', familyId], queryFn: () => load.rewardRequests(familyId) }),
+  };
+}
+
 /** Live updates. Refetch-on-focus (React Query default) covers events missed while asleep. */
 export function useRealtime(familyId: string) {
   const qc = useQueryClient();
   useEffect(() => {
     const filter = `family_id=eq.${familyId}`;
-    const refresh = (key: string) => () => qc.invalidateQueries({ queryKey: [key, familyId] });
+    const refresh = (...keys: string[]) => () => {
+      for (const key of keys) qc.invalidateQueries({ queryKey: [key, familyId] });
+    };
     const channel = supabase.channel(`family:${familyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_results', filter }, refresh('results'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_results', filter }, refresh('results', 'stats'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rewards', filter }, refresh('rewards'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_requests', filter }, refresh('rewardRequests', 'stats'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter }, refresh('tasks'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_assignees', filter }, refresh('tasks'))
       .subscribe();
